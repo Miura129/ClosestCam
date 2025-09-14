@@ -1,5 +1,6 @@
--- ClosestCam_Contracted.lua
+-- ClosestCam_Movable.lua
 -- LocalScript 用（StarterPlayerScripts に置いても、loadstring 経由で呼んでも動きます）
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
@@ -9,7 +10,7 @@ local camera = workspace.CurrentCamera
 -- 設定
 local SMOOTHNESS = 8        -- 数値を大きくすると追従が滑らかになります（目安: 4〜12）
 local BUTTON_SIZE = UDim2.new(0, 110, 0, 40)
-local BUTTON_POS  = UDim2.new(1, -120, 1, -60) -- 右下
+local BUTTON_POS  = UDim2.new(1, -120, 1, -60) -- 初期位置
 
 -- 内部状態
 local enabled = false
@@ -33,7 +34,7 @@ local function getClosestPlayer()
 	return closestPlayer
 end
 
--- UI（スマホ対応のボタン）を作る
+-- UI（スマホ対応・ドラッグ可能ボタン）を作る
 local function createToggleButton()
 	local playerGui = localPlayer:WaitForChild("PlayerGui")
 	local existing = playerGui:FindFirstChild("ClosestCamGui")
@@ -61,6 +62,46 @@ local function createToggleButton()
 	btn.BorderSizePixel = 0
 	btn.ZIndex = 10
 
+	-- ドラッグ用変数
+	local dragging = false
+	local dragInput
+	local dragStart
+	local startPos
+
+	-- ドラッグ開始
+	btn.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = btn.Position
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					dragging = false
+				end
+			end)
+		end
+	end)
+
+	-- ドラッグ移動検知
+	btn.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+			dragInput = input
+		end
+	end)
+
+	-- RenderStepped でボタン移動
+	RunService.RenderStepped:Connect(function()
+		if dragging and dragInput then
+			local delta = dragInput.Position - dragStart
+			btn.Position = UDim2.new(
+				startPos.X.Scale,
+				startPos.X.Offset + delta.X,
+				startPos.Y.Scale,
+				startPos.Y.Offset + delta.Y
+			)
+		end
+	end)
+
 	return btn
 end
 
@@ -72,8 +113,14 @@ local function setEnabled(on)
 	toggleButton.Text = enabled and "Lock: ON" or "Lock: OFF"
 end
 
+-- ボタン押下（クリック・タッチ対応）
 toggleButton.MouseButton1Click:Connect(function()
 	setEnabled(not enabled)
+end)
+toggleButton.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.Touch then
+		setEnabled(not enabled)
+	end
 end)
 
 -- 毎フレームで追従（合同モード：位置は保持、向きだけ追従）
